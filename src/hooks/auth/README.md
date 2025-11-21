@@ -4,7 +4,287 @@ This directory contains comprehensive authentication hooks built on top of Bette
 
 ## Available Hooks
 
-### 1. `useRegister` - User Registration with Email/Password or OAuth
+### 1. `useTwoFactor` - Two-Factor Authentication Management
+
+Manage two-factor authentication (2FA) using TOTP (Time-based One-Time Password) with authenticator apps like Google Authenticator, Authy, or 1Password.
+
+#### Usage - Enable 2FA
+
+```typescript
+import { useTwoFactor } from "@/hooks/auth/use-two-factor";
+
+function TwoFactorSetup() {
+  const {
+    enableTwoFactor,
+    isEnabling,
+    enableError,
+    verifyTwoFactor,
+    isVerifying,
+    verifySuccess,
+  } = useTwoFactor();
+
+  const [totpURI, setTotpURI] = useState<string>("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+
+  const handleEnable = async () => {
+    const result = await enableTwoFactor("userPassword123");
+    if (result) {
+      setTotpURI(result.totpURI || "");
+      setBackupCodes(result.backupCodes || []);
+    }
+  };
+
+  const handleVerify = async (code: string) => {
+    await verifyTwoFactor({ code });
+    if (verifySuccess) {
+      // 2FA is now active
+      router.push("/dashboard");
+    }
+  };
+
+  return (
+    <div>
+      {!totpURI ? (
+        <button onClick={handleEnable} disabled={isEnabling}>
+          Enable 2FA
+        </button>
+      ) : (
+        <div>
+          {/* Display QR code using totpURI */}
+          <QRCode value={totpURI} />
+
+          {/* Show backup codes */}
+          <div>
+            <h3>Backup Codes</h3>
+            <p>Save these codes in a safe place:</p>
+            {backupCodes.map((code) => (
+              <p key={code}>{code}</p>
+            ))}
+          </div>
+
+          {/* Verify with authenticator app code */}
+          <input
+            type="text"
+            placeholder="Enter 6-digit code"
+            onChange={(e) => handleVerify(e.target.value)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+#### Usage - Disable 2FA
+
+```typescript
+import { useTwoFactor } from "@/hooks/auth/use-two-factor";
+
+function TwoFactorSettings() {
+  const { disableTwoFactor, isDisabling, disableSuccess, disableError } = useTwoFactor();
+
+  const handleDisable = async () => {
+    await disableTwoFactor("userPassword123");
+    if (disableSuccess) {
+      // 2FA has been disabled
+    }
+  };
+
+  return (
+    <div>
+      {disableError && <p className="error">{disableError}</p>}
+      {disableSuccess && <p className="success">2FA disabled successfully</p>}
+      <button onClick={handleDisable} disabled={isDisabling}>
+        {isDisabling ? "Disabling..." : "Disable 2FA"}
+      </button>
+    </div>
+  );
+}
+```
+
+#### API
+
+- `enableTwoFactor(password)` - Generate TOTP URI and backup codes
+  - `password` (string, required) - User's current password for verification
+  - Returns: `{ totpURI?: string, backupCodes?: string[] } | null`
+
+- `verifyTwoFactor(data)` - Verify and activate 2FA
+  - `data.code` (string, required) - 6-digit code from authenticator app
+
+- `disableTwoFactor(password)` - Disable 2FA for the user
+  - `password` (string, required) - User's current password for verification
+
+- `isEnabling` (boolean) - Loading state for enable operation
+- `enableError` (string | null) - Error message for enable operation
+- `isVerifying` (boolean) - Loading state for verify operation
+- `verifyError` (string | null) - Error message for verify operation
+- `verifySuccess` (boolean) - Success state for verify operation
+- `isDisabling` (boolean) - Loading state for disable operation
+- `disableError` (string | null) - Error message for disable operation
+- `disableSuccess` (boolean) - Success state for disable operation
+
+---
+
+### 2. `useSession` - Session Management
+
+Manage user sessions including viewing current session, listing all active sessions, and revoking sessions. Provides real-time session information including creation time, expiration time, IP address, and user agent.
+
+#### Usage - View Current Session
+
+```typescript
+import { useSession } from "@/hooks/auth/use-session";
+
+function SessionInfo() {
+  const { session, isLoading, error } = useSession();
+
+  if (isLoading) return <p>Loading session...</p>;
+  if (error) return <p>Error: {error}</p>;
+
+  return (
+    <div>
+      {session?.user && (
+        <div>
+          <h3>Current Session</h3>
+          <p>User: {session.user.email}</p>
+          <p>Name: {session.user.name}</p>
+          <p>Session ID: {session.session?.id}</p>
+          <p>Created: {session.session?.createdAt.toLocaleString()}</p>
+          <p>Expires: {session.session?.expiresAt.toLocaleString()}</p>
+          <p>IP Address: {session.session?.ipAddress}</p>
+          <p>User Agent: {session.session?.userAgent}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+#### Usage - List All Sessions
+
+```typescript
+import { useSession } from "@/hooks/auth/use-session";
+import { useState, useEffect } from "react";
+
+function ActiveSessions() {
+  const { listSessions, isListingSessions, listError } = useSession();
+  const [sessions, setSessions] = useState([]);
+
+  useEffect(() => {
+    const loadSessions = async () => {
+      const data = await listSessions();
+      setSessions(data);
+    };
+    loadSessions();
+  }, []);
+
+  return (
+    <div>
+      <h3>Active Sessions</h3>
+      {isListingSessions && <p>Loading sessions...</p>}
+      {listError && <p className="error">{listError}</p>}
+
+      {sessions.map((session) => (
+        <div key={session.id}>
+          <p>Device: {session.userAgent}</p>
+          <p>IP: {session.ipAddress}</p>
+          <p>Created: {new Date(session.createdAt).toLocaleString()}</p>
+          <p>Expires: {new Date(session.expiresAt).toLocaleString()}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+#### Usage - Revoke Sessions
+
+```typescript
+import { useSession } from "@/hooks/auth/use-session";
+
+function SessionManager() {
+  const {
+    listSessions,
+    revokeSession,
+    revokeOtherSessions,
+    isRevokingSession,
+    isRevokingOtherSessions,
+    revokeError,
+  } = useSession();
+
+  const [sessions, setSessions] = useState([]);
+
+  const handleRevokeSession = async (token: string) => {
+    await revokeSession(token);
+    // Refresh the list
+    const updatedSessions = await listSessions();
+    setSessions(updatedSessions);
+  };
+
+  const handleRevokeAllOthers = async () => {
+    await revokeOtherSessions();
+    // Refresh the list
+    const updatedSessions = await listSessions();
+    setSessions(updatedSessions);
+  };
+
+  return (
+    <div>
+      {revokeError && <p className="error">{revokeError}</p>}
+
+      <button
+        onClick={handleRevokeAllOthers}
+        disabled={isRevokingOtherSessions}
+      >
+        Sign out all other devices
+      </button>
+
+      {sessions.map((session) => (
+        <div key={session.id}>
+          <p>{session.userAgent}</p>
+          <button
+            onClick={() => handleRevokeSession(session.token)}
+            disabled={isRevokingSession}
+          >
+            Revoke
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+#### API
+
+- `session` (SessionInfo | null) - Current session information
+  - `session.user` - User details (id, email, name, image, emailVerified, timestamps)
+  - `session.session` - Session details (id, userId, token, createdAt, updatedAt, expiresAt, ipAddress, userAgent)
+
+- `refreshSession()` - Refresh the current session data
+  - Returns: `Promise<void>`
+
+- `listSessions()` - Get all active sessions for the current user
+  - Returns: `Promise<SessionData[]>`
+
+- `revokeSession(sessionToken)` - Revoke a specific session
+  - `sessionToken` (string, required) - The token of the session to revoke
+  - Returns: `Promise<void>`
+
+- `revokeOtherSessions()` - Revoke all sessions except the current one
+  - Returns: `Promise<void>`
+
+- `isLoading` (boolean) - Initial loading state
+- `error` (string | null) - Session fetch error
+- `isRefreshing` (boolean) - Loading state for refresh operation
+- `isListingSessions` (boolean) - Loading state for list operation
+- `isRevokingSession` (boolean) - Loading state for revoke operation
+- `isRevokingOtherSessions` (boolean) - Loading state for revoke others operation
+- `listError` (string | null) - Error message for list operation
+- `revokeError` (string | null) - Error message for revoke operations
+
+---
+
+### 3. `useRegister` - User Registration with Email/Password or OAuth
 
 Handle user registration with email/password and optional OTP verification flow, or OAuth providers (GitHub, Google, Discord, Microsoft).
 
@@ -100,7 +380,7 @@ function RegisterForm() {
 
 ---
 
-### 2. `useLogin` - Email/Password Login
+### 4. `useLogin` - Email/Password Login
 
 Handle user login with email and password authentication.
 
@@ -147,7 +427,7 @@ function LoginForm() {
 
 ---
 
-### 3. `useOTPVerification` - OTP Verification Management
+### 5. `useOTPVerification` - OTP Verification Management
 
 Universal OTP verification hook for all OTP types (sign-in, email-verification, forget-password).
 
@@ -225,9 +505,9 @@ function OTPVerificationForm() {
 
 ---
 
-### 4. `useSignOut` - User Sign Out
+### 6. `useForgotPassword` - Password Reset with OTP
 
-Handle user sign out with optional callbacks and redirect.
+Handle password reset flow using OTP verification.
 
 #### Usage
 
@@ -274,9 +554,9 @@ function SignOutButton() {
 
 ---
 
-### 5. `useForgotPassword` - Password Reset with OTP
+### 7. `useSignOut` - User Sign Out
 
-Handle password reset flow using OTP verification.
+Handle user sign out with optional redirect.
 
 #### Usage
 

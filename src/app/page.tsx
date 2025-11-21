@@ -1,3 +1,4 @@
+import { LogoutButton } from "@/components/auth/logout-button";
 import { clientEnv } from "@/env";
 
 export default async function Home() {
@@ -51,6 +52,7 @@ export default async function Home() {
         <p className="mb-8 text-zinc-600 dark:text-zinc-400">
           Your journey to building amazing apps starts here.
         </p>
+        <LogoutButton />
       </div>
     </div>
   );
